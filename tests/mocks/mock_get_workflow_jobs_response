@@ -1,0 +1,5 @@
+{"next_page_token": null, "jobs": [{"id": "1234", "name": "job1", "type": "build", "status":
+"canceled", "start_time": "2019-04-16T15:14:30Z", "dependencies": [], "job_number": 1, "stop_time":
+"2019-04-16T15:31:42Z"}, {"id": "2345", "name": "job2", "type": "build", "status": "success",
+"start_time": "2019-04-16T15:14:31Z", "dependencies": [], "job_number": 2, "stop_time":
+"2019-04-16T15:19:01Z"}]}

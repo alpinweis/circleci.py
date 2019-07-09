@@ -35,6 +35,14 @@ class TestCircleCIApi(unittest.TestCase):
 
         self.assertEqual(resp["selected_email"], 'mock+ccie-tester@circleci.com')
 
+    def test_get_project(self):
+        self.loadMock('mock_get_project_response')
+        resp = json.loads(self.c.get_project('gh/foo/bar'))
+        self.assertEqual(resp['slug'], 'gh/foo/bar')
+        self.assertEqual(resp['organization_name'], 'foo')
+        self.assertEqual(resp['name'], 'bar')
+        self.assertIn("vcs_info", resp)
+
     def test_get_projects(self):
         self.loadMock('mock_get_projects_response')
         resp = json.loads(self.c.get_projects())
@@ -117,6 +125,27 @@ class TestCircleCIApi(unittest.TestCase):
         resp = json.loads(self.c.trigger_build('ccie-tester', 'testing'))
 
         self.assertEqual(resp['reponame'], 'MOCK+testing')
+
+    def test_get_pipeline(self):
+        self.loadMock('mock_get_pipeline_response')
+        resp = json.loads(self.c.get_pipeline('dummy-pipeline-id'))
+        self.assertEqual(resp['state'], 'created')
+
+    def test_get_pipeline_config(self):
+        self.loadMock('mock_get_pipeline_config_response')
+        resp = json.loads(self.c.get_pipeline_config('dummy-pipeline-id'))
+        self.assertIn("source", resp)
+        self.assertIn("compiled", resp)
+
+    def test_get_workflow(self):
+        self.loadMock('mock_get_workflow_response')
+        resp = json.loads(self.c.get_workflow('dummy-workflow-id'))
+        self.assertEqual(resp['status'], 'running')
+
+    def test_get_workflow_jobs(self):
+        self.loadMock('mock_get_workflow_jobs_response')
+        resp = json.loads(self.c.get_workflow_jobs('dummy-workflow-id'))
+        self.assertEqual(len(resp['jobs']), 2)
 
     def test_list_checkout_keys(self):
         self.loadMock('mock_list_checkout_keys_response')

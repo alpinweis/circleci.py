@@ -11,25 +11,32 @@ circleci.api
 import os
 
 import requests
+from requests.adapters import HTTPAdapter
 from requests.auth import HTTPBasicAuth
+from urllib3 import Retry
 
 from circleci.error import BadKeyError, BadVerbError, InvalidFilterError
+
+API_BASE_URL = 'https://circleci.com/api'
+API_VER_V1 = 'v1.1'
+API_VER_V2 = 'v2'
 
 
 class Api():
     """A python interface into the CircleCI API"""
 
-    def __init__(self, token, url='https://circleci.com/api/v1.1'):
+    def __init__(self, token, url=API_BASE_URL):
         """Instantiate a new circleci.Api object.
 
-        :param url: The URL to the CircleCI instance. Defaults to \
-            https://circleci.com/api/v1.1. If you are running CircleCI server, \
+        :param url: The URL to the CircleCI API instance. Defaults to \
+            https://circleci.com/api. If you are running CircleCI server, \
             the API is available at the same endpoint of your own \
-            installation url. i.e (https://circleci.yourcompany.com/api/v1.1).
+            installation url. i.e (https://circleci.yourcompany.com/api).
         :param token: Your CircleCI API token.
         """
         self.token = token
         self.url = url
+        self._session = self._request_session()
 
     def get_user_info(self):
         """Provides information about the signed in user.
@@ -39,6 +46,15 @@ class Api():
         """
         resp = self._request('GET', 'me')
         return resp
+
+    def get_project(self, slug):
+        """Retrieves an individual project by its unique slug.
+
+        Endpoint:
+            GET: ``/project/{slug}``
+        """
+        endpoint = 'project/{0}'.format(slug)
+        return self._request('GET', endpoint, api_version=API_VER_V2)
 
     def get_projects(self):
         """List of all the projects you're following on CircleCI.
@@ -307,6 +323,42 @@ class Api():
         )
         resp = self._request('POST', endpoint)
         return resp
+
+    def get_pipeline(self, pipeline_id):
+        """Full details of a given pipeline.
+
+        Endpoint:
+            GET: ``/pipeline/{id}``
+        """
+        endpoint = 'pipeline/{0}'.format(pipeline_id)
+        return self._request('GET', endpoint, api_version=API_VER_V2)
+
+    def get_pipeline_config(self, pipeline_id):
+        """Returns the configuration of a given pipeline.
+
+        Endpoint:
+            GET: ``/pipeline/{id}/config``
+        """
+        endpoint = 'pipeline/{0}/config'.format(pipeline_id)
+        return self._request('GET', endpoint, api_version=API_VER_V2)
+
+    def get_workflow(self, workflow_id):
+        """Summary details of a given workflow.
+
+        Endpoint:
+            GET: ``/workflow/{id}``
+        """
+        endpoint = 'workflow/{0}'.format(workflow_id)
+        return self._request('GET', endpoint, api_version=API_VER_V2)
+
+    def get_workflow_jobs(self, workflow_id):
+        """List of all jobs of a given workflow.
+
+        Endpoint:
+            GET: ``/workflow/{id}/jobs``
+        """
+        endpoint = 'workflow/{0}/jobs'.format(workflow_id)
+        return self._request('GET', endpoint, api_version=API_VER_V2)
 
     def add_ssh_user(self, username, project, build_num, vcs_type='github'):
         """Adds a user to the build's SSH permissions.
@@ -640,14 +692,45 @@ class Api():
 
         return resp
 
-    def _request(self, verb, endpoint, data=None):
+    def _request_session(
+        self,
+        retries=5,
+        backoff_factor=0.3,
+        status_forcelist=(408, 500, 502, 503, 504, 520, 521, 522, 523, 524),
+    ):
+        """Get a session with Retry enabled.
+
+        :param retries: Number of retries to allow
+        :param backoff_factor:  Backoff factor to apply between attempts
+        :param status_forcelist: HTTP status codes to force a retry on
+
+        :returns: A requests.Session object.
+        """
+        session = requests.Session()
+        retry = Retry(
+            total=retries,
+            backoff_factor=backoff_factor,
+            status_forcelist=status_forcelist,
+            method_whitelist=False,
+            raise_on_redirect=False,
+            raise_on_status=False,
+            respect_retry_after_header=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        return session
+
+
+    def _request(self, verb, endpoint, data=None, api_version=None):
         """Request a url.
 
-        :param endpoint: The api endpoint we want to call.
-        :param verb: POST, GET, or DELETE.
-        :param params: Optional build parameters.
+        :param verb: GET, POST or DELETE.
+        :param endpoint: The API endpoint to call.
+        :param data: Optional POST data.
+        :param api_version: Optional API version to use. Default: v1.1
 
-        :type params: dict
+        :type data: dict
 
         :raises requests.exceptions.HTTPError: When response code is not successful.
 
@@ -660,14 +743,15 @@ class Api():
         auth = HTTPBasicAuth(self.token, '')
         resp = None
 
-        request_url = "{0}/{1}".format(self.url, endpoint)
+        api_version = API_VER_V1 if api_version is None else api_version
+        request_url = "{0}/{1}/{2}".format(self.url, api_version, endpoint)
 
         if verb == 'GET':
-            resp = requests.get(request_url, auth=auth, headers=headers)
+            resp = self._session.get(request_url, auth=auth, headers=headers)
         elif verb == 'POST':
-            resp = requests.post(request_url, auth=auth, headers=headers, json=data)
+            resp = self._session.post(request_url, auth=auth, headers=headers, json=data)
         elif verb == 'DELETE':
-            resp = requests.delete(request_url, auth=auth, headers=headers)
+            resp = self._session.delete(request_url, auth=auth, headers=headers)
         else:
             raise BadVerbError(verb)
 
@@ -691,7 +775,7 @@ class Api():
 
         endpoint = "{0}?circle-token={1}".format(url, self.token)
 
-        resp = requests.get(endpoint, stream=True)
+        resp = self._session.get(endpoint, stream=True)
 
         path = "{0}/{1}".format(destdir, filename)
 
