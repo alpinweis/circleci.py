@@ -92,13 +92,13 @@ class Api():
             offset=0,
             status_filter=None,
             branch=None,
-            vcs_type='github'):
+            vcs_type='github',
+            shallow=False):
         """Build summary for each of the last 30 builds for a single git repo.
 
         :param username: Org or user name.
         :param project: Case sensitive repo name.
-        :param limit: The number of builds to return. Maximum 100, defaults \
-            to 30.
+        :param limit: The number of builds to return. Maximum 100, defaults to 30.
         :param offset: The API returns builds starting from this offset, \
             defaults to 0.
         :param status_filter: Restricts which builds are returned. \
@@ -107,9 +107,12 @@ class Api():
         :param branch: Narrow returned builds to a single branch.
         :param vcs_type: Defaults to github. On circleci.com you can \
             also pass in ``bitbucket``.
+        :param shallow: Optional boolean value that may be sent to improve \
+            overall performance if set to 'true'.
 
         :type limit: int
         :type offset: int
+        :type shallow: bool
 
         :raises InvalidFilterError: when filter is not a valid filter.
 
@@ -121,45 +124,52 @@ class Api():
         if status_filter not in valid_filters:
             raise InvalidFilterError(status_filter, 'status')
 
+        _shallow = '&shallow=true' if shallow else ''
+
         if branch:
-            endpoint = 'project/{0}/{1}/{2}/tree/{3}?limit={4}&offset={5}&filter={6}'.format(
+            endpoint = 'project/{0}/{1}/{2}/tree/{3}?limit={4}&offset={5}&filter={6}{7}'.format(
                 vcs_type,
                 username,
                 project,
                 branch,
                 limit,
                 offset,
-                status_filter
+                status_filter,
+                _shallow
             )
         else:
-            endpoint = 'project/{0}/{1}/{2}?limit={3}&offset={4}&filter={5}'.format(
+            endpoint = 'project/{0}/{1}/{2}?limit={3}&offset={4}&filter={5}{6}'.format(
                 vcs_type,
                 username,
                 project,
                 limit,
                 offset,
-                status_filter
+                status_filter,
+                _shallow
             )
 
         resp = self._request('GET', endpoint)
         return resp
 
-    def get_recent_builds(self, limit=30, offset=0):
+    def get_recent_builds(self, limit=30, offset=0, shallow=False):
         """
         Build summary for each of the last 30 recent builds, ordered by build_num.
 
-        :param limit: The number of builds to return. Maximum 100, defaults \
-            to 30.
+        :param limit: The number of builds to return. Maximum 100, defaults to 30.
         :param offset: The API returns builds starting from this offset, \
             defaults to 0.
+        :param shallow: Optional boolean value that may be sent to improve \
+            overall performance if set to 'true'.
 
         :type limit: int
         :type offset: int
+        :type shallow: bool
 
         Endpoint:
             GET: ``/recent-builds``
         """
-        endpoint = 'recent-builds?limit={0}&offset={1}'.format(limit, offset)
+        _shallow = '&shallow=true' if shallow else ''
+        endpoint = 'recent-builds?limit={0}&offset={1}{2}'.format(limit, offset, _shallow)
 
         resp = self._request('GET', endpoint)
         return resp
@@ -355,9 +365,9 @@ class Api():
         """List of all jobs of a given workflow.
 
         Endpoint:
-            GET: ``/workflow/{id}/jobs``
+            GET: ``/workflow/{id}/job``
         """
-        endpoint = 'workflow/{0}/jobs'.format(workflow_id)
+        endpoint = 'workflow/{0}/job'.format(workflow_id)
         return self._request('GET', endpoint, api_version=API_VER_V2)
 
     def add_ssh_user(self, username, project, build_num, vcs_type='github'):
@@ -694,14 +704,14 @@ class Api():
 
     def _request_session(
         self,
-        retries=5,
+        retries=3,
         backoff_factor=0.3,
         status_forcelist=(408, 500, 502, 503, 504, 520, 521, 522, 523, 524),
     ):
         """Get a session with Retry enabled.
 
         :param retries: Number of retries to allow
-        :param backoff_factor:  Backoff factor to apply between attempts
+        :param backoff_factor: Backoff factor to apply between attempts
         :param status_forcelist: HTTP status codes to force a retry on
 
         :returns: A requests.Session object.

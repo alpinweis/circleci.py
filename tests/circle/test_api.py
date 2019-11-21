@@ -145,7 +145,7 @@ class TestCircleCIApi(unittest.TestCase):
     def test_get_workflow_jobs(self):
         self.loadMock('mock_get_workflow_jobs_response')
         resp = json.loads(self.c.get_workflow_jobs('dummy-workflow-id'))
-        self.assertEqual(len(resp['jobs']), 2)
+        self.assertEqual(len(resp['items']), 2)
 
     def test_list_checkout_keys(self):
         self.loadMock('mock_list_checkout_keys_response')
